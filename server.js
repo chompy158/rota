@@ -5,7 +5,7 @@ const fs = require('fs'); // Node.js File System module
 const bodyParser = require('body-parser'); // For parsing JSON data from requests
 
 const app = express();
-const port = process.env.PORT || 80; // Pterodactyl usually assigns ports, check your egg's config
+const port = process.env.PORT || 27013; // Pterodactyl usually assigns ports, check your egg's config
 
 // Middleware to parse JSON request bodies
 app.use(bodyParser.json());
