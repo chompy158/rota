@@ -43,39 +43,52 @@ const App = () => {
     // State to track the currently dragged employee's ID
     const [draggedEmployeeId, setDraggedEmployeeId] = useState(null);
 
-    // --- Local Storage Data Loading and Saving ---
+    // --- Data Loading and Saving (NOW VIA API) ---
     useEffect(() => {
-        // Load data from local storage on component mount
-        try {
-            const savedRota = localStorage.getItem('rotaData');
-            const savedNotes = localStorage.getItem('rotaNotes');
-            const savedLastUpdated = localStorage.getItem('lastUpdated');
+        const fetchData = async () => {
+            try {
+                const response = await fetch('/api/rota'); // Fetch data from your new API endpoint
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setRota(data.rota || {}); // Use empty object if data.rota is null/undefined
+                setNotes(data.notes || ''); // Use empty string if data.notes is null/undefined
+                setLastUpdated(data.lastUpdated || null); // Use null if data.lastUpdated is null/undefined
+            } catch (error) {
+                console.error("Error fetching rota data:", error);
+                // Optionally: Display a user-friendly error message on the UI
+            }
+        };
 
-            if (savedRota) {
-                setRota(JSON.parse(savedRota));
-            }
-            if (savedNotes) {
-                setNotes(savedNotes);
-            }
-            if (savedLastUpdated) {
-                setLastUpdated(savedLastUpdated);
-            }
-        } catch (error) {
-            console.error("Error loading data from local storage:", error);
-        }
-    }, []); // Empty dependency array means this runs once on mount
+        fetchData();
+    }, []); // Empty dependency array means this runs once on component mount
 
-    // Function to save rota and notes to local storage
-    const saveRotaAndNotes = (updatedRota, updatedNotes) => {
+    // Function to save rota and notes (NOW VIA API)
+    const saveRotaAndNotes = async (updatedRota, updatedNotes) => {
+        const now = new Date().toISOString(); // Generate timestamp at the point of saving
         try {
-            const now = new Date().toISOString(); // Get current timestamp
-            localStorage.setItem('rotaData', JSON.stringify(updatedRota));
-            localStorage.setItem('rotaNotes', updatedNotes);
-            localStorage.setItem('lastUpdated', now); // Save timestamp
-            setLastUpdated(now); // Update state
-            console.log("Rota and notes saved to local storage!");
+            const response = await fetch('/api/rota', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    rota: updatedRota,
+                    notes: updatedNotes,
+                    lastUpdated: now // Send the newly generated timestamp to the backend
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            // If save is successful, update the frontend's lastUpdated state
+            setLastUpdated(now);
+            console.log("Rota and notes saved via API!");
         } catch (error) {
-            console.error("Error saving data to local storage:", error);
+            console.error("Error saving rota data via API:", error);
+            // Optionally: Display a user-friendly error message on the UI
         }
     };
 
@@ -182,6 +195,7 @@ const App = () => {
                 delete newRota[selectedDay];
             }
 
+            // Save the updated rota to the backend
             saveRotaAndNotes(newRota, notes);
             return newRota;
         });
@@ -216,6 +230,7 @@ const App = () => {
                     delete newRota[selectedDay];
                 }
             }
+            // Save the updated rota to the backend
             saveRotaAndNotes(newRota, notes);
             return newRota;
         });
@@ -226,6 +241,7 @@ const App = () => {
         if (!isAdmin) return;
         const newNotes = e.target.value;
         setNotes(newNotes);
+        // Save the updated notes to the backend
         saveRotaAndNotes(rota, newNotes);
     };
 
@@ -237,6 +253,7 @@ const App = () => {
             if (newRota[selectedDay]) {
                 delete newRota[selectedDay]; // Remove all shifts for the selected day
             }
+            // Save the updated rota to the backend
             saveRotaAndNotes(newRota, notes);
             return newRota;
         });
@@ -434,7 +451,6 @@ const App = () => {
                                     onChange={handleNotesChange}
                                     readOnly={false}
                                 ></textarea>
-                                {/* The Export Rota to HTML button was here and has been removed */}
                             </div>
                         </div>
                     </div>
