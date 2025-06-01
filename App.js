@@ -43,52 +43,84 @@ const App = () => {
     // State to track the currently dragged employee's ID
     const [draggedEmployeeId, setDraggedEmployeeId] = useState(null);
 
-    // --- Data Loading and Saving (NOW VIA API) ---
+    // --- Data Loading from Server (using fetch) ---
     useEffect(() => {
-        const fetchData = async () => {
+        const loadData = async () => {
             try {
-                const response = await fetch('/api/rota'); // Fetch data from your new API endpoint
+                const response = await fetch('/api/rota');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
-                setRota(data.rota || {}); // Use empty object if data.rota is null/undefined
-                setNotes(data.notes || ''); // Use empty string if data.notes is null/undefined
-                setLastUpdated(data.lastUpdated || null); // Use null if data.lastUpdated is null/undefined
+                if (data.rota) {
+                    setRota(data.rota);
+                }
+                if (data.notes) {
+                    setNotes(data.notes);
+                }
+                if (data.lastUpdated) {
+                    setLastUpdated(data.lastUpdated);
+                }
+                console.log("Data loaded from server.");
             } catch (error) {
-                console.error("Error fetching rota data:", error);
-                // Optionally: Display a user-friendly error message on the UI
+                console.error("Error loading data from server:", error);
+                // Optionally, load from localStorage as a fallback if server fails
+                try {
+                    const savedRota = localStorage.getItem('rotaData');
+                    const savedNotes = localStorage.getItem('rotaNotes');
+                    const savedLastUpdated = localStorage.getItem('lastUpdated');
+
+                    if (savedRota) setRota(JSON.parse(savedRota));
+                    if (savedNotes) setNotes(savedNotes);
+                    if (savedLastUpdated) setLastUpdated(savedLastUpdated);
+                    console.warn("Loaded data from local storage as a fallback.");
+                } catch (localError) {
+                    console.error("Error loading fallback data from local storage:", localError);
+                }
             }
         };
 
-        fetchData();
-    }, []); // Empty dependency array means this runs once on component mount
+        loadData();
+    }, []); // Empty dependency array means this runs once on mount
 
-    // Function to save rota and notes (NOW VIA API)
+    // Function to save rota and notes to the server (using fetch)
     const saveRotaAndNotes = async (updatedRota, updatedNotes) => {
-        const now = new Date().toISOString(); // Generate timestamp at the point of saving
         try {
+            const now = new Date().toISOString(); // Get current timestamp
             const response = await fetch('/api/rota', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    rota: updatedRota,
-                    notes: updatedNotes,
-                    lastUpdated: now // Send the newly generated timestamp to the backend
-                }),
+                body: JSON.stringify({ rota: updatedRota, notes: updatedNotes, lastUpdated: now }),
             });
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            // If save is successful, update the frontend's lastUpdated state
-            setLastUpdated(now);
-            console.log("Rota and notes saved via API!");
+            const result = await response.json();
+            console.log("Rota and notes saved to server:", result.message);
+            setLastUpdated(now); // Update state on successful save
+
+            // Optionally, also save to local storage as a backup
+            localStorage.setItem('rotaData', JSON.stringify(updatedRota));
+            localStorage.setItem('rotaNotes', updatedNotes);
+            localStorage.setItem('lastUpdated', now);
+            console.log("Rota and notes saved to local storage as backup.");
+
         } catch (error) {
-            console.error("Error saving rota data via API:", error);
-            // Optionally: Display a user-friendly error message on the UI
+            console.error("Error saving data to server:", error);
+            // Optionally, only save to local storage if server save fails
+            try {
+                const now = new Date().toISOString();
+                localStorage.setItem('rotaData', JSON.stringify(updatedRota));
+                localStorage.setItem('rotaNotes', updatedNotes);
+                localStorage.setItem('lastUpdated', now);
+                setLastUpdated(now);
+                console.warn("Server save failed, data saved to local storage as primary.");
+            } catch (localError) {
+                console.error("Error saving data to local storage as fallback:", localError);
+            }
         }
     };
 
@@ -195,8 +227,7 @@ const App = () => {
                 delete newRota[selectedDay];
             }
 
-            // Save the updated rota to the backend
-            saveRotaAndNotes(newRota, notes);
+            saveRotaAndNotes(newRota, notes); // Call server save
             return newRota;
         });
 
@@ -230,8 +261,7 @@ const App = () => {
                     delete newRota[selectedDay];
                 }
             }
-            // Save the updated rota to the backend
-            saveRotaAndNotes(newRota, notes);
+            saveRotaAndNotes(newRota, notes); // Call server save
             return newRota;
         });
     };
@@ -241,8 +271,7 @@ const App = () => {
         if (!isAdmin) return;
         const newNotes = e.target.value;
         setNotes(newNotes);
-        // Save the updated notes to the backend
-        saveRotaAndNotes(rota, newNotes);
+        saveRotaAndNotes(rota, newNotes); // Call server save
     };
 
     // Function to clear all assignments for the selected day
@@ -253,8 +282,7 @@ const App = () => {
             if (newRota[selectedDay]) {
                 delete newRota[selectedDay]; // Remove all shifts for the selected day
             }
-            // Save the updated rota to the backend
-            saveRotaAndNotes(newRota, notes);
+            saveRotaAndNotes(newRota, notes); // Call server save
             return newRota;
         });
     };
@@ -341,8 +369,8 @@ const App = () => {
                                         draggable={true}
                                         onDragStart={(e) => handleDragStart(e, employee.id)}
                                         className="p-4 rounded-lg shadow-md flex items-center justify-between transition-all duration-200
-                                                   bg-purple-800 cursor-grab active:cursor-grabbing hover:scale-105 hover:shadow-lg border border-purple-700 hover:bg-purple-700
-                                                   text-gray-100"
+                                                 bg-purple-800 cursor-grab active:cursor-grabbing hover:scale-105 hover:shadow-lg border border-purple-700 hover:bg-purple-700
+                                                 text-gray-100"
                                     >
                                         <span className="font-semibold text-lg">{employee.name}</span>
                                         <img
@@ -369,7 +397,7 @@ const App = () => {
                                         key={day}
                                         onClick={() => setSelectedDay(day)}
                                         className={`py-2 px-4 rounded-md font-semibold transition-colors duration-200
-                                                    ${selectedDay === day ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                                                     ${selectedDay === day ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                                     >
                                         {day}
                                     </button>
@@ -404,12 +432,12 @@ const App = () => {
                                                     onDragOver={handleDragOver}
                                                     onDrop={(e) => handleDrop(e, shift)}
                                                     className="p-3 border-b border-gray-700 text-center relative
-                                                                min-w-[120px] h-24 align-top hover:border-purple-500 hover:bg-gray-600"
+                                                                 min-w-[120px] h-24 align-top hover:border-purple-500 hover:bg-gray-600"
                                                 >
                                                     <div className={`flex flex-col items-center justify-start h-full p-1
-                                                                     rounded-md border-2 border-dashed
-                                                                     ${(rota[selectedDay]?.[shift]?.length > 0) ? 'border-[var(--purple-base)] bg-[var(--purple-darker)] assigned-employee-slot-filled' : 'border-purple-700 bg-gray-700 text-gray-300 assigned-employee-slot-empty'}
-                                                                     transition-all duration-200`}>
+                                                                    rounded-md border-2 border-dashed
+                                                                    ${(rota[selectedDay]?.[shift]?.length > 0) ? 'border-[var(--purple-base)] bg-[var(--purple-darker)] assigned-employee-slot-filled' : 'border-purple-700 bg-gray-700 text-gray-300 assigned-employee-slot-empty'}
+                                                                    transition-all duration-200`}>
                                                         {rota[selectedDay]?.[shift]?.length > 0 ? (
                                                             rota[selectedDay][shift].map(employeeId => (
                                                                 <div key={employeeId}
@@ -451,6 +479,7 @@ const App = () => {
                                     onChange={handleNotesChange}
                                     readOnly={false}
                                 ></textarea>
+                                {/* The Export Rota to HTML button was here and has been removed */}
                             </div>
                         </div>
                     </div>
@@ -494,8 +523,8 @@ const App = () => {
                                                     className="p-3 border-b border-gray-700 text-center relative min-w-[120px] h-24 align-top"
                                                 >
                                                     <div className={`flex flex-col items-center justify-start h-full p-1
-                                                                     rounded-md border-2 border-dashed
-                                                                     ${(rota[day]?.[shift]?.length > 0) ? 'border-[var(--purple-base)] bg-[var(--purple-darker)] assigned-employee-slot-filled' : 'border-gray-700 bg-gray-700 text-gray-300 assigned-employee-slot-empty'}`}>
+                                                                    rounded-md border-2 border-dashed
+                                                                    ${(rota[day]?.[shift]?.length > 0) ? 'border-[var(--purple-base)] bg-[var(--purple-darker)] assigned-employee-slot-filled' : 'border-gray-700 bg-gray-700 text-gray-300 assigned-employee-slot-empty'}`}>
                                                         {rota[day]?.[shift]?.length > 0 ? (
                                                             rota[day][shift].map(employeeId => (
                                                                 <div key={employeeId}
